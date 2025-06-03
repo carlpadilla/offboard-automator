@@ -1,6 +1,6 @@
 ---
 
-# **Offboard Entra Users Web App**
+# **Offboard Entra Users**
 
 ---
 
