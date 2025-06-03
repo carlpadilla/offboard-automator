@@ -1,6 +1,6 @@
 ---
 
-# **Offboard Entra Users**
+# **Offboard EntraID Users**
 
 ---
 
