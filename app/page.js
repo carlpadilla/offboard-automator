@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react"; // For a stylish plus icon, needs lucide-react
+import { Plus } from "lucide-react";
 
 export default function Home() {
   const [users, setUsers] = useState([]);
@@ -77,20 +77,12 @@ export default function Home() {
                 <option value="" disabled>
                   -- Select a user --
                 </option>
-                {users
-                  .filter(
-                    (user) =>
-                      // Allow the same user in multiple dropdowns for flexibility,
-                      // or uncomment the next line to prevent duplicates:
-                      // !selectedUsers.includes(user.id) || user.id === selectedUser
-                      true
-                  )
-                  .map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.displayName}
-                      {user.mail ? ` (${user.mail})` : ""}
-                    </option>
-                  ))}
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.displayName}
+                    {user.mail ? ` (${user.mail})` : ""}
+                  </option>
+                ))}
               </select>
               {selectedUsers.length > 1 && (
                 <button
@@ -138,6 +130,13 @@ export default function Home() {
                   {result.actions.map((action, j) => (
                     <li key={j}>{action}</li>
                   ))}
+                  {result.password && (
+                    <li>
+                      <span className="text-yellow-300 font-mono">
+                        New Password: {result.password}
+                      </span>
+                    </li>
+                  )}
                   {result.error && (
                     <li className="text-red-400">Error: {result.error}</li>
                   )}
