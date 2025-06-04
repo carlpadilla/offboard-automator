@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ClientSecretCredential } from '@azure/identity';
 import { Client } from '@microsoft/microsoft-graph-client';
+import generatePassword from 'generate-password';
 
 export async function POST(request) {
   try {
@@ -20,12 +21,12 @@ export async function POST(request) {
       authProvider: (done) => done(null, token.token),
     });
 
-    // Results per user
     const results = [];
 
     for (const userId of userIds) {
       const actions = [];
       let displayName = userId;
+      let newPassword = "";
       try {
         // Get display name for reporting
         const user = await client.api(`/users/${userId}`).select('displayName').get();
@@ -40,10 +41,28 @@ export async function POST(request) {
         actions.push("Revoked sign-in sessions");
 
         // 3. Set companyName to "Former Employee"
-        await client.api(`/users/${userId}`).update({ companyName: "Disabled" });
-        actions.push('Replaced company name with "Disabled"');
+        await client.api(`/users/${userId}`).update({ companyName: "Former Employee" });
+        actions.push('Replaced company name with "Former Employee"');
 
-        results.push({ displayName, actions });
+        // 4. Reset password
+        newPassword = generatePassword.generate({
+          length: 16,
+          numbers: true,
+          symbols: true,
+          uppercase: true,
+          lowercase: true,
+          strict: true,
+        });
+
+        await client.api(`/users/${userId}`).update({
+          passwordProfile: {
+            password: newPassword,
+            forceChangePasswordNextSignIn: true
+          }
+        });
+        actions.push("Reset password to a random value (shown below)");
+
+        results.push({ displayName, actions, password: newPassword });
       } catch (err) {
         results.push({
           displayName,
@@ -55,11 +74,3 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
-      message: "Users offboarded successfully.",
-      results
-    });
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
