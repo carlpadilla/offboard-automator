@@ -5,7 +5,7 @@ import generatePassword from 'generate-password';
 
 export async function POST(request) {
   try {
-    const { userIds } = await request.json();
+    const { userIds, disableDevices } = await request.json();
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return NextResponse.json({ error: 'At least one user must be selected.' }, { status: 400 });
     }
@@ -21,18 +21,20 @@ export async function POST(request) {
       authProvider: (done) => done(null, token.token),
     });
 
+    // Results per user
     const results = [];
 
     for (const userId of userIds) {
       const actions = [];
       let displayName = userId;
       let newPassword = "";
+      let disabledDevices = [];
       try {
         // Get display name for reporting
         const user = await client.api(`/users/${userId}`).select('displayName').get();
         displayName = user.displayName || userId;
 
-        // 1. Disable the user
+        // 1. Disable the user account
         await client.api(`/users/${userId}`).update({ accountEnabled: false });
         actions.push("Disabled account");
 
@@ -41,8 +43,8 @@ export async function POST(request) {
         actions.push("Revoked sign-in sessions");
 
         // 3. Set companyName to "Former Employee"
-        await client.api(`/users/${userId}`).update({ companyName: "Former Employee" });
-        actions.push('Replaced company name with "Former Employee"');
+        await client.api(`/users/${userId}`).update({ companyName: "Disabled" });
+        actions.push('Replaced company name with "Disabled"');
 
         // 4. Reset password
         newPassword = generatePassword.generate({
@@ -53,7 +55,6 @@ export async function POST(request) {
           lowercase: true,
           strict: true,
         });
-
         await client.api(`/users/${userId}`).update({
           passwordProfile: {
             password: newPassword,
@@ -61,6 +62,30 @@ export async function POST(request) {
           }
         });
         actions.push("Reset password to a random value (shown below)");
+
+        // 5. Optionally disable assigned devices
+        if (disableDevices) {
+          const devResult = await client.api(`/users/${userId}/ownedDevices`).get();
+          const devices = (devResult.value || []).filter(d => d.deviceId);
+          for (const device of devices) {
+            try {
+              await client.api(`/devices/${device.id}`).update({ accountEnabled: false });
+              disabledDevices.push(device.displayName || device.id);
+            } catch (err) {
+              // Optionally track device errors
+              disabledDevices.push(
+                `${device.displayName || device.id} (failed to disable)`
+              );
+            }
+          }
+          if (disabledDevices.length) {
+            actions.push(
+              `Disabled devices: ${disabledDevices.join(", ")}`
+            );
+          } else {
+            actions.push("No devices to disable");
+          }
+        }
 
         results.push({ displayName, actions, password: newPassword });
       } catch (err) {
@@ -74,3 +99,11 @@ export async function POST(request) {
 
     return NextResponse.json({
       success: true,
+      message: "Users offboarded successfully.",
+      results
+    });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

@@ -8,6 +8,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [steps, setSteps] = useState([]);
+  const [disableDevices, setDisableDevices] = useState(false);
+  const [userDevices, setUserDevices] = useState({});
 
   useEffect(() => {
     fetch("/api/list-users")
@@ -30,11 +32,29 @@ export default function Home() {
     setSelectedUsers(updated);
   };
 
+  useEffect(() => {
+    if (!disableDevices) {
+      setUserDevices({});
+      return;
+    }
+    const fetchUserDevices = async () => {
+      let devicesByUser = {};
+      for (const userId of selectedUsers.filter(Boolean)) {
+        const res = await fetch(`/api/get-user-devices?userId=${userId}`);
+        const data = await res.json();
+        devicesByUser[userId] = Array.isArray(data) ? data : [];
+      }
+      setUserDevices(devicesByUser);
+    };
+    if (selectedUsers.filter(Boolean).length > 0) {
+      fetchUserDevices();
+    }
+  }, [selectedUsers, disableDevices]);
+
   const handleOffboard = async () => {
     setLoading(true);
     setMessage("");
     setSteps([]);
-    // Remove empty or duplicate user IDs
     const userIds = [...new Set(selectedUsers.filter((id) => !!id))];
     if (userIds.length === 0) {
       setMessage("Please select at least one user.");
@@ -45,7 +65,7 @@ export default function Home() {
       const response = await fetch("/api/offboard-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIds }),
+        body: JSON.stringify({ userIds, disableDevices }),
       });
       const data = await response.json();
       if (data.success) {
@@ -107,6 +127,40 @@ export default function Home() {
             </div>
           ))}
         </div>
+        <div className="flex items-center mt-4 mb-2">
+          <input
+            type="checkbox"
+            id="disable-devices"
+            checked={disableDevices}
+            onChange={(e) => setDisableDevices(e.target.checked)}
+            className="mr-2 accent-blue-600"
+          />
+          <label htmlFor="disable-devices" className="text-gray-200 text-sm">
+            Disable user’s assigned devices in Entra ID
+          </label>
+        </div>
+        {disableDevices &&
+          selectedUsers.filter(Boolean).length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-white text-md font-semibold">Assigned Devices:</h3>
+              <ul className="text-sm text-gray-300 list-disc pl-5">
+                {selectedUsers.filter(Boolean).map((userId) => (
+                  <li key={userId}>
+                    <span className="font-medium">
+                      {users.find((u) => u.id === userId)?.displayName || userId}:
+                    </span>{" "}
+                    {userDevices[userId] && userDevices[userId].length > 0 ? (
+                      userDevices[userId]
+                        .map((dev) => dev.displayName || dev.id)
+                        .join(", ")
+                    ) : (
+                      <span className="text-gray-400 italic">No assigned devices</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         <button
           disabled={selectedUsers.filter(Boolean).length === 0 || loading}
           onClick={handleOffboard}
@@ -149,3 +203,6 @@ export default function Home() {
     </div>
   );
 }
+// This code is a Next.js client component that allows users to offboard multiple users from an Azure AD tenant.
+// It fetches the list of users from an API, allows selection of users, and performs offboarding actions such as disabling accounts, revoking sessions, updating company names, and resetting passwords.
+// The component also optionally disables assigned devices in Entra ID and displays the results of the offboarding process, including any errors encountered.
