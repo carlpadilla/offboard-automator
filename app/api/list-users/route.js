@@ -20,7 +20,8 @@ export async function GET() {
 
     const users = await client.api('/users').select('id,displayName,mail').top(100).get();
 
-    return NextResponse.json(users.value);
+    // 👇 This wraps the value in an object with a 'users' property!
+    return NextResponse.json({ users: users.value });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: error.message }, { status: 500 });
