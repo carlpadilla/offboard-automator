@@ -216,32 +216,40 @@ export default function OffboarderUI() {
         </div>
       )}
 
-     {offboardResults && (
-  <div className="results-panel">
-    <div style={{ color: "#22cc55", fontWeight: 700, fontSize: "1.1em", marginBottom: "1em" }}>
-      Users successfully offboarded!
-    </div>
-    <ul>
-      {offboardResults.map(res => (
-        <li key={res.userId} style={{ color: "inherit", marginBottom: "1em" }}>
-          <strong>
-            {userOptions.find(u => u.id === res.userId)?.displayName || res.userId}:
-          </strong>
-          <ul style={{ margin: "0.5em 0 0 1.2em" }}>
-            {(res.actions || []).map((action, i) => (
-              <li key={i} style={{ color: action.startsWith("Error") ? "#fa4" : "inherit" }}>
-                {action}
-              </li>
-            ))}
-            {res.error && (
-              <li style={{ color: "#f44" }}>Error: {res.error}</li>
-            )}
-          </ul>
-        </li>
-      ))}
-    </ul>
-  </div>
-)}
+    {offboardResults && (
+      <div className="results-panel">
+        <div style={{ color: "#22cc55", fontWeight: 700, fontSize: "1.1em", marginBottom: "1em" }}>
+          Users successfully offboarded!
+        </div>
+        <ul>
+          {offboardResults.map(res => (
+            <li key={res.userId} style={{ color: "inherit", marginBottom: "1em" }}>
+              <strong>
+                {userOptions.find(u => u.id === res.userId)?.displayName || res.userId}:
+              </strong>
+              <ul style={{ margin: "0.5em 0 0 1.2em" }}>
+                {(res.actions || []).map((action, i) => (
+                  <li key={i} style={{ color: action.startsWith("Error") ? "#fa4" : "inherit" }}>
+                    {action}
+                  </li>
+                ))}
+                {/* SHOW PASSWORD FOR TESTING ONLY */}
+                {res.password && (
+                  <li>
+                    <strong style={{ color: "#d09e26" }}>New Password (TEST):</strong>
+                    <span style={{ fontFamily: "monospace", marginLeft: "0.5em" }}>{res.password}</span>
+                  </li>
+                )}
+                {res.error && (
+                  <li style={{ color: "#f44" }}>Error: {res.error}</li>
+                )}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+
 
     </div>
   );
