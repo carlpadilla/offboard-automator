@@ -120,3 +120,22 @@ body.dark .assigned-devices-panel {
   background: #19191a !important;
   color: #fff !important;
 }
+
+.results-panel {
+  background: #19191a;
+  color: #fff;
+  border-radius: 10px;
+  padding: 1.5em;
+  margin-top: 1.5em;
+  transition: background 0.3s, color 0.3s;
+}
+
+body.light .results-panel {
+  background: #f8f8fa !important;
+  color: #181a1b !important;
+}
+
+body.dark .results-panel {
+  background: #19191a !important;
+  color: #fff !important;
+}

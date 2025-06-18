@@ -216,38 +216,33 @@ export default function OffboarderUI() {
         </div>
       )}
 
-      {offboardResults && (
-        <div style={{
-          background: "#171a17",
-          color: "#0f0",
-          borderRadius: "10px",
-          padding: "1.5em",
-          marginTop: "1.5em"
-        }}>
-          <div style={{ color: "#3ff279", fontWeight: 700, fontSize: "1.1em", marginBottom: "1em" }}>
-            Users successfully offboarded!
-          </div>
-          <ul>
-            {offboardResults.map(res => (
-              <li key={res.userId} style={{ color: "#fff", marginBottom: "1em" }}>
-                <strong>
-                  {userOptions.find(u => u.id === res.userId)?.displayName || res.userId}:
-                </strong>
-                <ul style={{ margin: "0.5em 0 0 1.2em" }}>
-                  {(res.actions || []).map((action, i) => (
-                    <li key={i} style={{ color: action.startsWith("Error") ? "#fa4" : "#fff" }}>
-                      {action}
-                    </li>
-                  ))}
-                  {res.error && (
-                    <li style={{ color: "#f44" }}>Error: {res.error}</li>
-                  )}
-                </ul>
+     {offboardResults && (
+  <div className="results-panel">
+    <div style={{ color: "#22cc55", fontWeight: 700, fontSize: "1.1em", marginBottom: "1em" }}>
+      Users successfully offboarded!
+    </div>
+    <ul>
+      {offboardResults.map(res => (
+        <li key={res.userId} style={{ color: "inherit", marginBottom: "1em" }}>
+          <strong>
+            {userOptions.find(u => u.id === res.userId)?.displayName || res.userId}:
+          </strong>
+          <ul style={{ margin: "0.5em 0 0 1.2em" }}>
+            {(res.actions || []).map((action, i) => (
+              <li key={i} style={{ color: action.startsWith("Error") ? "#fa4" : "inherit" }}>
+                {action}
               </li>
             ))}
+            {res.error && (
+              <li style={{ color: "#f44" }}>Error: {res.error}</li>
+            )}
           </ul>
-        </div>
-      )}
+        </li>
+      ))}
+    </ul>
+  </div>
+)}
+
     </div>
   );
 }
