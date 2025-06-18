@@ -17,8 +17,7 @@ export default function OffboarderUI() {
       try {
         const res = await fetch("/api/list-users/");
         const data = await res.json();
-        // Expecting the API to return an array directly
-        setUserOptions(Array.isArray(data) ? data : (data.users || []));
+        setUserOptions(data.users || data || []);
       } catch (err) {
         setError("Failed to fetch users.");
       }
@@ -35,8 +34,7 @@ export default function OffboarderUI() {
           try {
             const res = await fetch(`/api/get-user-devices?userId=${entry.userId}`);
             const data = await res.json();
-            // If the API returns an array, use data directly
-            devices[entry.userId] = Array.isArray(data) ? data : (data.devices || []);
+            devices[entry.userId] = data.devices || data || [];
           } catch {
             devices[entry.userId] = [];
           }
@@ -168,13 +166,7 @@ export default function OffboarderUI() {
         </div>
 
         {disableDevices && (
-          <div style={{
-            background: "#19191a",
-            borderRadius: "8px",
-            padding: "1em",
-            marginBottom: "1em",
-            color: "#fff"
-          }}>
+          <div className="assigned-devices-panel">
             <div style={{ fontWeight: 600, marginBottom: "0.3em" }}>Assigned Devices:</div>
             {selectedUsers.map(entry => {
               const user = userOptions.find(u => u.id === entry.userId);
@@ -183,7 +175,7 @@ export default function OffboarderUI() {
                 <div key={entry.userId} style={{ fontSize: "1em", marginLeft: "1em", marginBottom: "0.3em" }}>
                   • {user?.displayName || entry.userId}:{" "}
                   {userDevices.length > 0
-                    ? userDevices.map(d => d.displayName || d.deviceId || d.id).join(", ")
+                    ? userDevices.map(d => d.displayName || d.id).join(", ")
                     : <span style={{ fontStyle: "italic", color: "#aaa" }}>No assigned devices</span>}
                 </div>
               ) : null;

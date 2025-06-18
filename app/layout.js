@@ -1,11 +1,15 @@
+import './globals.css'; // <-- Make sure this is here!
+import { ThemeProvider } from './context/ThemeContext';
 import NextAuthSessionProvider from "./providers/SessionProvider";
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, padding: 0, background: "#111" }}>
+      <body>
         <NextAuthSessionProvider>
-          {children}
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
         </NextAuthSessionProvider>
       </body>
     </html>
