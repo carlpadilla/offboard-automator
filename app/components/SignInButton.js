@@ -9,19 +9,13 @@ export default function SignInButton() {
 
   if (session) {
     return (
-      <div style={{ margin: "1em 0" }}>
-        <span>Welcome, {session.user?.name || session.user?.email}!</span>
+      <div className="my-4 flex items-center gap-3">
+        <span className="text-sm text-[var(--foreground)]">
+          Welcome, {session.user?.name || session.user?.email}!
+        </span>
         <button
           onClick={() => signOut()}
-          style={{
-            marginLeft: "1em",
-            background: "#888",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            padding: "0.5em 1em",
-            cursor: "pointer"
-          }}
+          className="rounded-md bg-zinc-700 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400"
         >
           Sign Out
         </button>
@@ -32,16 +26,7 @@ export default function SignInButton() {
   return (
     <button
       onClick={() => signIn("azure-ad")}
-      style={{
-        background: "#2563eb",
-        color: "white",
-        padding: "0.75em 1.5em",
-        borderRadius: "8px",
-        border: "none",
-        fontSize: "1rem",
-        cursor: "pointer",
-        margin: "1em 0"
-      }}
+      className="my-4 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
     >
       Sign In with Microsoft
     </button>

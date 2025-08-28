@@ -10,67 +10,52 @@ export default function Home() {
 
   if (status === "loading") {
     return (
-      <main style={{ minHeight: "100vh" }}>
-        Loading...
+      <main className="min-h-screen grid place-items-center text-[var(--foreground)]">
+        <div className="text-sm opacity-80">Loading...</div>
       </main>
     );
   }
 
   if (status === "unauthenticated") {
     return (
-      <main style={{
-        minHeight: "100vh",
-        padding: "2em",
-        fontFamily: "sans-serif",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center"
-      }}>
-        <div style={{ display: "flex", justifyContent: "flex-end", width: "100%" }}>
-          <ThemeToggle />
+      <main className="min-h-screen px-6 py-8 text-[var(--foreground)]">
+        <div className="mx-auto flex max-w-3xl flex-col items-center">
+          <div className="mb-6 flex w-full items-center justify-end">
+            <ThemeToggle />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">Welcome to Offboarder</h1>
+          <SignInButton />
+          <section className="card mt-10 w-full max-w-xl">
+            <h2 className="mb-3 text-xl font-semibold">Get Started</h2>
+            <ol className="list-decimal space-y-1 pl-5 text-sm opacity-90">
+              <li>Sign in with your Microsoft account.</li>
+              <li>Access the offboarding tools after authentication.</li>
+            </ol>
+          </section>
         </div>
-        <h1 style={{ fontSize: "2.5em", marginBottom: "1em" }}>Welcome to Offboarder</h1>
-        <SignInButton />
-        <section className="card" style={{
-          marginTop: "3em",
-          width: "100%",
-          maxWidth: "520px"
-        }}>
-          <h2>Get Started</h2>
-          <ol>
-            <li>Sign in with your Microsoft account.</li>
-            <li>Access the offboarding tools after authentication.</li>
-          </ol>
-        </section>
       </main>
     );
   }
 
   // Authenticated users
   return (
-    <main style={{
-      minHeight: "100vh",
-      padding: "2em",
-      fontFamily: "sans-serif",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center"
-    }}>
-      <div style={{ display: "flex", justifyContent: "flex-end", width: "100%" }}>
-        <ThemeToggle />
+    <main className="min-h-screen px-6 py-8 text-[var(--foreground)]">
+      <div className="mx-auto flex max-w-3xl flex-col items-center">
+        <div className="mb-6 flex w-full items-center justify-end">
+          <ThemeToggle />
+        </div>
+        <h1 className="mb-2 text-3xl font-bold tracking-tight">
+          Welcome, {session.user?.name || session.user?.email}!
+        </h1>
+        <SignInButton />
+        <section className="card mt-10 w-full max-w-xl">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Offboarding Tools</h2>
+            <p className="mt-1 text-sm opacity-80">Select users and optionally disable their assigned devices.</p>
+          </div>
+          <OffboarderUI />
+        </section>
       </div>
-      <h1 style={{ fontSize: "2.5em", marginBottom: "1em" }}>
-        Welcome, {session.user?.name || session.user?.email}!
-      </h1>
-      <SignInButton />
-      <section className="card" style={{
-        marginTop: "3em",
-        width: "100%",
-        maxWidth: "520px"
-      }}>
-        <h2>Offboarding Tools</h2>
-        <OffboarderUI />
-      </section>
     </main>
   );
 }

@@ -1,110 +1,151 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useEffect, useState, useCallback } from 'react';
 
 export default function OffboarderUI() {
   const [userOptions, setUserOptions] = useState([]);
-  const [selectedUsers, setSelectedUsers] = useState([{ userId: "", id: Date.now() }]);
+  // Multiple selection: array of { id: string, key: number }
+  const [selectedUsers, setSelectedUsers] = useState([{ id: '', key: Date.now() }]);
+
   const [disableDevices, setDisableDevices] = useState(false);
+  // Map of userId -> device array
   const [assignedDevices, setAssignedDevices] = useState({});
   const [loading, setLoading] = useState(false);
   const [offboardResults, setOffboardResults] = useState(null);
   const [error, setError] = useState(null);
 
-  // Fetch users from backend API
+  // -------- Load users once --------
   useEffect(() => {
-    const fetchUsers = async () => {
+    (async () => {
       try {
-        const res = await fetch("/api/list-users/");
+        const res = await fetch('/api/list-users');
         const data = await res.json();
         setUserOptions(data.users || data || []);
-      } catch (err) {
-        setError("Failed to fetch users.");
+      } catch {
+        setError('Failed to load users.');
       }
-    };
-    fetchUsers();
+    })();
   }, []);
 
-  // Fetch assigned devices for selected users
+  // -------- Devices fetcher (single user) --------
+  const fetchDevicesForUser = useCallback(async (userId) => {
+    if (!userId || !disableDevices) {
+      setAssignedDevices(prev => {
+        const clone = { ...prev };
+        delete clone[userId];
+        return clone;
+      });
+      return;
+    }
+    try {
+      const res = await fetch(`/api/get-user-devices?userId=${encodeURIComponent(userId)}`);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.devices || []);
+      setAssignedDevices(prev => ({ ...prev, [userId]: list }));
+    } catch {
+      setAssignedDevices(prev => ({ ...prev, [userId]: [] }));
+    }
+  }, [disableDevices]);
+
+  // -------- When selection changes, clear results and refresh device previews --------
   useEffect(() => {
-    const fetchDevices = async () => {
-      const devices = {};
-      for (const entry of selectedUsers) {
-        if (entry.userId) {
-          try {
-            const res = await fetch(`/api/get-user-devices?userId=${entry.userId}`);
-            const data = await res.json();
-            devices[entry.userId] = data.devices || data || [];
-          } catch {
-            devices[entry.userId] = [];
-          }
-        }
-      }
-      setAssignedDevices(devices);
-    };
-    if (disableDevices) fetchDevices();
-    else setAssignedDevices({});
-    // eslint-disable-next-line
-  }, [selectedUsers, disableDevices]);
-
-  const handleUserChange = (idx, userId) => {
-    setSelectedUsers(prev =>
-      prev.map((u, i) => (i === idx ? { ...u, userId } : u))
-    );
-  };
-
-  const addUser = () => {
-    setSelectedUsers(prev => [...prev, { userId: "", id: Date.now() }]);
-  };
-
-  const removeUser = (idx) => {
-    setSelectedUsers(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
     setOffboardResults(null);
     setError(null);
 
-    const userIds = selectedUsers.map(u => u.userId).filter(Boolean);
+    if (!disableDevices) {
+      setAssignedDevices({});
+      return;
+    }
+    // fetch for all chosen users
+    selectedUsers.forEach(u => {
+      if (u.id) fetchDevicesForUser(u.id);
+    });
+  }, [selectedUsers, fetchDevicesForUser, disableDevices]);
+
+  // -------- If the toggle changes, refresh devices for current selections --------
+  useEffect(() => {
+    if (!disableDevices) {
+      setAssignedDevices({});
+      return;
+    }
+    selectedUsers.forEach(u => u.id && fetchDevicesForUser(u.id));
+  }, [disableDevices, selectedUsers, fetchDevicesForUser]);
+
+  // -------- Selection helpers --------
+  const changeUserAt = (index, newId) => {
+    setSelectedUsers(prev =>
+      prev.map((u, i) => (i === index ? { ...u, id: newId } : u))
+    );
+  };
+
+  const addUserRow = () => {
+    setSelectedUsers(prev => [...prev, { id: '', key: Date.now() + Math.random() }]);
+  };
+
+  const removeUserRow = (index) => {
+    setSelectedUsers(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      return next.length ? next : [{ id: '', key: Date.now() }]; // always keep one row
+    });
+  };
+
+  // -------- Submit --------
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+
+    const userIds = selectedUsers.map(u => u.id).filter(Boolean);
     if (userIds.length === 0) {
-      setError("Please select at least one user.");
+      setError('Please select at least one user.');
       return;
     }
 
     setLoading(true);
-
     try {
-      const res = await fetch("/api/offboard-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIds, disableDevices })
+      const res = await fetch('/api/offboard-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userIds,
+          disableDevices,
+        }),
       });
+
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Request failed: ${res.status}`);
+      }
+
       const data = await res.json();
       setOffboardResults(data.results || []);
     } catch (err) {
-      setError("Offboarding failed.");
+      setError(err.message || 'Offboarding failed.');
     } finally {
       setLoading(false);
     }
   };
 
+  const displayName = (id) =>
+    userOptions.find(u => u.id === id)?.displayName ||
+    userOptions.find(u => u.id === id)?.mail ||
+    userOptions.find(u => u.id === id)?.userPrincipalName ||
+    id;
+
   return (
-    <div>
-      <form onSubmit={handleSubmit} style={{ marginBottom: "2em" }}>
-        {selectedUsers.map((entry, idx) => (
-          <div key={entry.id} style={{ display: "flex", alignItems: "center", marginBottom: "1em" }}>
+    <form onSubmit={handleSubmit}>
+      {/* Multi user pickers */}
+      <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
+        {selectedUsers.map((row, idx) => (
+          <div key={row.key} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select
-              value={entry.userId}
-              onChange={e => handleUserChange(idx, e.target.value)}
+              value={row.id}
+              onChange={(e) => changeUserAt(idx, e.target.value)}
               style={{
-                width: "260px",
-                padding: "0.6em",
-                borderRadius: "6px",
-                marginRight: "0.5em",
-                fontSize: "1em"
+                flex: 1,
+                padding: '10px',
+                borderRadius: 8,
+                border: '1px solid #ccc',
               }}
-              required
             >
               <option value="">-- Select a user --</option>
               {userOptions.map(u => (
@@ -113,144 +154,163 @@ export default function OffboarderUI() {
                 </option>
               ))}
             </select>
+
+            {/* Remove button (hidden when only one row) */}
             {selectedUsers.length > 1 && (
               <button
                 type="button"
-                onClick={() => removeUser(idx)}
+                onClick={() => removeUserRow(idx)}
+                title="Remove"
+                aria-label="Remove user row"
                 style={{
-                  background: "none",
-                  border: "none",
-                  color: "#e77",
-                  fontWeight: "bold",
-                  fontSize: "1.5em",
-                  cursor: "pointer",
-                  marginRight: "0.4em"
+                  border: '1px solid #ddd',
+                  background: 'transparent',
+                  color: 'var(--foreground)',
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  cursor: 'pointer'
                 }}
-                title="Remove user"
               >
-                ×
+                ✕
               </button>
             )}
+
+            {/* Add button (only on last row) */}
             {idx === selectedUsers.length - 1 && (
               <button
                 type="button"
-                onClick={addUser}
-                style={{
-                  background: "#2563eb",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "4px",
-                  fontSize: "1.3em",
-                  padding: "0.1em 0.55em",
-                  cursor: "pointer",
-                  marginLeft: "0.1em"
-                }}
+                onClick={addUserRow}
                 title="Add another user"
+                aria-label="Add another user"
+                style={{
+                  border: 'none',
+                  background: '#2563eb',
+                  color: '#fff',
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                  cursor: 'pointer'
+                }}
               >
                 +
               </button>
             )}
           </div>
         ))}
+      </div>
 
-        <div style={{ margin: "1em 0" }}>
-          <label style={{ display: "flex", alignItems: "center", fontWeight: 500 }}>
-            <input
-              type="checkbox"
-              checked={disableDevices}
-              onChange={e => setDisableDevices(e.target.checked)}
-              style={{ marginRight: "0.7em" }}
-            />
-            Disable user’s assigned devices in Entra ID
-          </label>
+      {/* Disable devices */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <input
+          type="checkbox"
+          checked={disableDevices}
+          onChange={e => setDisableDevices(e.target.checked)}
+        />
+        Disable user’s assigned devices in Entra ID
+      </label>
+
+      {/* Devices preview for each chosen user */}
+      {disableDevices && (
+        <div className="assigned-devices-panel">
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Assigned Devices:</div>
+          {selectedUsers.map(u => (
+            u.id ? (
+              <div key={`devices-${u.key}`} style={{ marginBottom: 6 }}>
+                • {displayName(u.id)}:{' '}
+                {(assignedDevices[u.id] && assignedDevices[u.id].length > 0)
+                  ? assignedDevices[u.id].map(d => d.displayName || d.deviceId || d.id).join(', ')
+                  : <span style={{ fontStyle: 'italic' }}>No assigned devices</span>}
+              </div>
+            ) : null
+          ))}
+          {selectedUsers.every(u => !u.id) && (
+            <div style={{ fontStyle: 'italic' }}>Select users to preview devices…</div>
+          )}
         </div>
+      )}
 
-        {disableDevices && (
-          <div className="assigned-devices-panel">
-            <div style={{ fontWeight: 600, marginBottom: "0.3em" }}>Assigned Devices:</div>
-            {selectedUsers.map(entry => {
-              const user = userOptions.find(u => u.id === entry.userId);
-              const userDevices = assignedDevices[entry.userId] || [];
-              return entry.userId ? (
-                <div key={entry.userId} style={{ fontSize: "1em", marginLeft: "1em", marginBottom: "0.3em" }}>
-                  • {user?.displayName || entry.userId}:{" "}
-                  {userDevices.length > 0
-                    ? userDevices.map(d => d.displayName || d.id).join(", ")
-                    : <span style={{ fontStyle: "italic", color: "#aaa" }}>No assigned devices</span>}
-                </div>
-              ) : null;
-            })}
-          </div>
-        )}
+      {/* Submit */}
+      <button
+        type="submit"
+        disabled={loading || selectedUsers.every(u => !u.id)}
+        style={{
+          width: '100%',
+          padding: '14px 16px',
+          border: 'none',
+          borderRadius: 10,
+          fontWeight: 700,
+          color: '#fff',
+          cursor: loading ? 'wait' : 'pointer',
+          background:
+            'linear-gradient(90deg, rgba(68,75,255,1) 0%, rgba(97,39,255,1) 100%)',
+          boxShadow: '0 8px 24px rgba(0,0,0,.15)',
+          marginTop: 12,
+        }}
+      >
+        {loading ? 'Offboarding…' : 'Offboard Selected Users'}
+      </button>
 
-        <button
-          type="submit"
-          disabled={loading}
+      {/* Error */}
+      {error && (
+        <div
+          className="results-panel"
           style={{
-            width: "100%",
-            background: loading ? "#444" : "#2563eb",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
-            fontSize: "1.1em",
-            padding: "1em",
-            fontWeight: 600,
-            marginTop: "0.7em",
-            cursor: loading ? "wait" : "pointer",
-            boxShadow: "0 2px 10px #0002"
+            background: 'var(--background)',
+            color: '#f55',
+            border: '1px solid rgba(255,85,85,.35)',
+            borderRadius: 12,
+            padding: '14px 16px',
+            marginTop: 14,
           }}
         >
-          {loading ? "Offboarding..." : "Offboard Selected Users"}
-        </button>
-      </form>
-
-      {error && (
-        <div style={{
-          background: "#7a2b27",
-          color: "#fff",
-          padding: "1em",
-          borderRadius: "8px",
-          marginBottom: "1em"
-        }}>
           {error}
         </div>
       )}
 
-    {offboardResults && (
-      <div className="results-panel">
-        <div style={{ color: "#22cc55", fontWeight: 700, fontSize: "1.1em", marginBottom: "1em" }}>
-          Users successfully offboarded!
+      {/* Results (clears automatically when you change any selection) */}
+      {offboardResults && (
+        <div className="results-panel" style={{
+          background: 'var(--background)',
+          color: 'var(--foreground)',
+          border: '1px solid rgba(0,0,0,.08)',
+          borderRadius: 12,
+          padding: '16px 18px',
+          marginTop: 16
+        }}>
+          <div style={{ color: '#22cc55', fontWeight: 700, fontSize: '1.05rem', marginBottom: 10 }}>
+            Users successfully offboarded!
+          </div>
+          <ul>
+            {offboardResults.map(res => (
+              <li key={res.userId} style={{ marginBottom: 12 }}>
+                <strong>{displayName(res.userId)}</strong>
+                <ul style={{ marginTop: 6, paddingLeft: '1.2rem' }}>
+                  {(res.actions || []).map((action, i) => (
+                    <li key={i} style={{ color: action.startsWith('Error') ? '#fa4' : 'inherit' }}>
+                      {action}
+                    </li>
+                  ))}
+                  {res.removedGroups && res.removedGroups.length > 0 && (
+                    <li>Removed from groups: {res.removedGroups.join(', ')}</li>
+                  )}
+                  {res.failedGroups && res.failedGroups.length > 0 && (
+                    <li style={{ color: '#fa4' }}>
+                      Failed group removals: {res.failedGroups.join(', ')}
+                    </li>
+                  )}
+                  {res.password && (
+                    <li style={{ color: '#f39c12' }}>
+                      <strong>New Password (TEST):</strong> {res.password}
+                    </li>
+                  )}
+                  {res.error && (
+                    <li style={{ color: '#f44' }}>Error: {res.error}</li>
+                  )}
+                </ul>
+              </li>
+            ))}
+          </ul>
         </div>
-        <ul>
-          {offboardResults.map(res => (
-            <li key={res.userId} style={{ color: "inherit", marginBottom: "1em" }}>
-              <strong>
-                {userOptions.find(u => u.id === res.userId)?.displayName || res.userId}:
-              </strong>
-              <ul style={{ margin: "0.5em 0 0 1.2em" }}>
-                {(res.actions || []).map((action, i) => (
-                  <li key={i} style={{ color: action.startsWith("Error") ? "#fa4" : "inherit" }}>
-                    {action}
-                  </li>
-                ))}
-                {/* SHOW PASSWORD FOR TESTING ONLY */}
-                {res.password && (
-                  <li>
-                    <strong style={{ color: "#d09e26" }}>New Password (TEST):</strong>
-                    <span style={{ fontFamily: "monospace", marginLeft: "0.5em" }}>{res.password}</span>
-                  </li>
-                )}
-                {res.error && (
-                  <li style={{ color: "#f44" }}>Error: {res.error}</li>
-                )}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      </div>
-    )}
-
-
-    </div>
+      )}
+    </form>
   );
 }

@@ -6,21 +6,13 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={toggleTheme}
-      style={{
-        margin: '0.7em 0',
-        padding: '0.5em 1.2em',
-        borderRadius: '2em',
-        border: 'none',
-        background: theme === 'dark' ? '#232323' : '#e3e3e3',
-        color: theme === 'dark' ? '#fff' : '#232323',
-        fontWeight: 600,
-        fontSize: '1em',
-        cursor: 'pointer',
-        boxShadow: theme === 'dark'
-          ? '0 2px 10px #0002'
-          : '0 2px 10px #aaa2'
-      }}
+      className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-sm transition focus:outline-none focus:ring-2 ${
+        theme === 'dark'
+          ? 'bg-zinc-800 text-white hover:bg-zinc-700 focus:ring-zinc-500'
+          : 'bg-zinc-200 text-zinc-800 hover:bg-zinc-300 focus:ring-zinc-300'
+      }`}
       aria-label="Toggle light/dark mode"
+      title="Toggle light/dark mode"
     >
       {theme === 'dark' ? '🌙 Dark Mode' : '🌞 Light Mode'}
     </button>
