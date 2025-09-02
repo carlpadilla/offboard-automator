@@ -1,142 +1,206 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../auth/[...nextauth]/route";
+import { authOptions } from "../../auth/[...nextauth]/route"; // adjust if your path differs
 import { Client } from "@microsoft/microsoft-graph-client";
+import "isomorphic-fetch";
 import { ClientSecretCredential } from "@azure/identity";
 
-// Helper to get an app-only Graph client
-async function getAppGraphClient() {
-  const credential = new ClientSecretCredential(
-    process.env.AZURE_TENANT_ID,
-    process.env.AZURE_CLIENT_ID,
-    process.env.AZURE_CLIENT_SECRET
-  );
-  const token = await credential.getToken("https://graph.microsoft.com/.default");
+// ---------- helpers ----------
+function newTempPassword() {
+  // short, strong, test-only password
+  return `Tmp!${Math.random().toString(36).slice(2, 8)}-${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+function graphClientDelegated(accessToken: string) {
   return Client.init({
-    authProvider: (done) => done(null, token.token),
+    authProvider: (done) => done(null, accessToken),
   });
 }
 
-export async function POST(req) {
-  // Only require that the caller is signed-in to the app (UI access control),
-  // not that they have a delegated Graph access token.
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized. Please sign in." }, { status: 401 });
+function graphClientAppOnly() {
+  const tenantId = process.env.GRAPH_TENANT_ID!;
+  const clientId = process.env.GRAPH_CLIENT_ID!;
+  const clientSecret = process.env.GRAPH_CLIENT_SECRET!;
+  const cred = new ClientSecretCredential(tenantId, clientId, clientSecret);
+  return Client.init({
+    authProvider: async (done) => {
+      try {
+        const token = await cred.getToken("https://graph.microsoft.com/.default");
+        done(null, token?.token || "");
+      } catch (e) {
+        done(e as any, null);
+      }
+    },
+  });
+}
+
+function hasAppCreds() {
+  return Boolean(
+    process.env.GRAPH_TENANT_ID &&
+      process.env.GRAPH_CLIENT_ID &&
+      process.env.GRAPH_CLIENT_SECRET
+  );
+}
+
+// ---------- route ----------
+export async function POST(req: Request) {
+  const wantAppMode = hasAppCreds();
+  let mode: "app" | "delegated" = wantAppMode ? "app" : "delegated";
+
+  // Delegated path needs a session token
+  let session: any = null;
+  if (mode === "delegated") {
+    session = await getServerSession(authOptions as any);
+    if (!session || !session.accessToken) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please sign in.", mode },
+        { status: 401 }
+      );
+    }
   }
 
-  // Parse request
-  let userIds = [];
+  // Parse body
+  let userIds: string[] = [];
   let disableDevices = false;
   try {
     const body = await req.json();
     userIds = Array.isArray(body.userIds) ? body.userIds : [];
     disableDevices = !!body.disableDevices;
   } catch {
-    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body.", mode }, { status: 400 });
   }
 
-  // App-only Graph client
-  const client = await getAppGraphClient();
+  // Get Graph client
+  const client =
+    mode === "app"
+      ? graphClientAppOnly()
+      : graphClientDelegated(session.accessToken);
 
-  const results = [];
+  const results: Array<{
+    userId: string;
+    actions: string[];
+    removedGroups?: string[];
+    failedGroups?: string[];
+    error?: string;
+    password?: string;
+  }> = [];
+
   for (const userId of userIds) {
-    const actions = [];
-    const removedGroups = [];
-    const failedGroups = [];
-    let error = null;
-    let newPassword = null;
+    const actions: string[] = [];
+    const removedGroups: string[] = [];
+    const failedGroups: string[] = [];
+    let error: string | undefined;
+    let newPassword: string | undefined;
 
     try {
-      // Disable account
-      await client.api(`/users/${userId}`).update({ accountEnabled: false });
-      actions.push("Disabled account");
-
-      // Revoke sessions
+      // 1) Disable account
       try {
-        await client.api(`/users/${userId}/revokeSignInSessions`).post();
-        actions.push("Revoked sign-in sessions");
-      } catch (e) {
-        actions.push(`Error revoking sessions: ${e?.message || String(e)}`);
+        await client.api(`/users/${userId}`).update({ accountEnabled: false });
+        actions.push("Disabled account");
+      } catch (e: any) {
+        const msg = e?.message || e?.body || String(e);
+        throw new Error(`Disable account failed: ${msg}`);
       }
 
-      // Stamp companyName
+      // 2) Revoke sessions
+      if (mode === "delegated") {
+        try {
+          await client.api(`/users/${userId}/revokeSignInSessions`).post({});
+          actions.push("Revoked sign-in sessions");
+        } catch (e: any) {
+          const msg = e?.message || e?.body || String(e);
+          actions.push(`Revoke sessions failed (delegated): ${msg}`);
+        }
+      } else {
+        actions.push("Skipped revoking sessions (requires delegated permissions)");
+      }
+
+      // 3) Mark companyName
       try {
         await client.api(`/users/${userId}`).update({ companyName: "Disabled" });
         actions.push('Replaced company name with "Disabled"');
-      } catch (e) {
-        actions.push(`Error updating company name: ${e?.message || String(e)}`);
+      } catch (e: any) {
+        const msg = e?.message || e?.body || String(e);
+        actions.push(`Set company name failed: ${msg}`);
       }
 
-      // Reset password (TEST ONLY – remove in prod)
+      // 4) Reset password
       try {
-        newPassword = `Tmp!${Math.random().toString(36).slice(2, 10)}-${Date.now().toString().slice(-4)}`;
+        newPassword = newTempPassword();
         await client.api(`/users/${userId}`).update({
-          passwordProfile: { forceChangePasswordNextSignIn: true, password: newPassword },
+          passwordProfile: {
+            forceChangePasswordNextSignIn: true,
+            password: newPassword,
+          },
         });
         actions.push("Reset password and set a strong random value");
-      } catch (e) {
-        actions.push(`Error resetting password: ${e?.message || String(e)}`);
+      } catch (e: any) {
+        const msg = e?.message || e?.body || String(e);
+        actions.push(`Error resetting password: ${msg}`);
       }
 
-      // Remove from (non-dynamic) groups
+      // 5) Remove from groups (ignore dynamic membership errors)
       try {
-        // memberOf returns groups; we filter for “group” type
-        const memberResult = await client.api(`/users/${userId}/memberOf`).get();
-        const groups = (memberResult.value || []).filter(
-          (m) => m["@odata.type"] === "#microsoft.graph.group"
+        const groups = await client
+          .api(`/users/${userId}/memberOf`)
+          .select("id,displayName")
+          .get();
+
+        const memberships = (groups?.value || []).filter(
+          (m: any) => m["@odata.type"] === "#microsoft.graph.group"
         );
 
-        if (!groups.length) {
-          actions.push("Removed from groups: None");
-        } else {
-          for (const g of groups) {
-            try {
-              // Attempt removal; dynamic-membership groups will 400/403 – we just record and continue
-              await client.api(`/groups/${g.id}/members/${userId}/$ref`).delete();
-              removedGroups.push(g.displayName || g.id);
-            } catch (e) {
-              failedGroups.push(
-                `${g.displayName || g.id} (${e?.statusCode || ""} ${e?.message || e})`
-              );
-            }
-          }
-          if (removedGroups.length) {
-            actions.push(`Removed from groups: ${removedGroups.join(", ")}`);
-          } else {
-            actions.push("Removed from groups: None");
-          }
-          if (failedGroups.length) {
-            actions.push(`Groups not removed (likely dynamic or protected): ${failedGroups.join(", ")}`);
+        for (const g of memberships) {
+          try {
+            await client.api(`/groups/${g.id}/members/${userId}/$ref`).delete();
+            removedGroups.push(g.displayName || g.id);
+          } catch (ge: any) {
+            // Dynamic membership or lack of rights often show up here — record and continue
+            failedGroups.push(`${g.displayName || g.id}: ${ge?.message || ge?.body || ge}`);
           }
         }
-      } catch (e) {
-        actions.push(`Error listing/removing groups: ${e?.message || String(e)}`);
+
+        if (removedGroups.length) {
+          actions.push(`Removed from groups: ${removedGroups.join(", ")}`);
+        } else {
+          actions.push("Removed from groups: None");
+        }
+        if (failedGroups.length) {
+          actions.push(`Groups failed/ignored: ${failedGroups.length}`);
+        }
+      } catch (e: any) {
+        const msg = e?.message || e?.body || String(e);
+        actions.push(`Group removal scan failed: ${msg}`);
       }
 
-      // Disable devices (optional)
+      // 6) Devices (optional)
       if (disableDevices) {
         try {
           const devResult = await client.api(`/users/${userId}/ownedDevices`).get();
-          const devices = (devResult.value || []).filter((d) => d.deviceId);
-          if (!devices.length) {
+          const devices = (devResult.value || []).filter((d: any) => d.id);
+          if (devices.length === 0) {
             actions.push("No assigned devices found");
           } else {
             for (const d of devices) {
               try {
                 await client.api(`/devices/${d.id}`).update({ accountEnabled: false });
                 actions.push(`Disabled device: ${d.displayName || d.id}`);
-              } catch (devErr) {
-                actions.push(`Error disabling device ${d.displayName || d.id}: ${devErr?.message || String(devErr)}`);
+              } catch (de: any) {
+                actions.push(
+                  `Error disabling device ${d.displayName || d.id}: ${
+                    de?.message || de?.body || de
+                  }`
+                );
               }
             }
           }
-        } catch (e) {
-          actions.push(`Error retrieving devices: ${e?.message || String(e)}`);
+        } catch (e: any) {
+          const msg = e?.message || e?.body || String(e);
+          actions.push(`Device lookup failed: ${msg}`);
         }
       }
-    } catch (e) {
-      error = e?.message || String(e);
+    } catch (outer: any) {
+      error = outer?.message || outer?.body || String(outer);
     }
 
     results.push({
@@ -145,10 +209,10 @@ export async function POST(req) {
       removedGroups,
       failedGroups,
       error,
-      // return password ONLY for testing – remove in production
+      // Expose the password ONLY while testing; remove in prod
       password: newPassword,
     });
   }
 
-  return NextResponse.json({ results });
+  return NextResponse.json({ mode, results });
 }
