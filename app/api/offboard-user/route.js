@@ -20,9 +20,9 @@ function graphClientDelegated(accessToken) {
 }
 
 function graphClientAppOnly() {
-  const tenantId = process.env.GRAPH_TENANT_ID;
-  const clientId = process.env.GRAPH_CLIENT_ID;
-  const clientSecret = process.env.GRAPH_CLIENT_SECRET;
+  const tenantId = process.env.AZURE_TENANT_ID;
+  const clientId = process.env.AZURE_CLIENT_ID;
+  const clientSecret = process.env.AZURE_CLIENT_SECRET;
 
   const cred = new ClientSecretCredential(tenantId, clientId, clientSecret);
 
