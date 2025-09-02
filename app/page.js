@@ -23,7 +23,7 @@ export default function Home() {
           <div className="mb-6 flex w-full items-center justify-end">
             <ThemeToggle />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Welcome to Offboarder!</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Welcome to Offboarder!!</h1>
           <SignInButton />
           <section className="card mt-10 w-full max-w-xl">
             <h2 className="mb-3 text-xl font-semibold">Get Started</h2>
