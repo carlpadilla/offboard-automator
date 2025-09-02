@@ -186,7 +186,7 @@ export async function POST(req) {
           const devResult = await client.api(`/users/${userId}/ownedDevices`).get();
           const devices = (devResult.value || []).filter((d) => d.id);
           if (!devices.length) {
-            actions.push("No assigned devices found");
+            actions.push("No assigned devices found!");
           } else {
             for (const d of devices) {
               try {
