@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route"; // adjust path if needed
 
 import { Client } from "@microsoft/microsoft-graph-client";
-import "isomorphic-fetch";
+
 
 /**
  * If/when you want to enable APP-ONLY mode, uncomment these lines
